@@ -92,7 +92,7 @@ init =
       , distance = 0
       , xPos = 0
       , targetXPos = 0
-      , resolution = ( 0, 0 )
+      , resolution = ( 1, 1 )
       }
     , Task.perform InitWindowSize Browser.Dom.getViewport
     )
