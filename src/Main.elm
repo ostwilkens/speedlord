@@ -1,6 +1,7 @@
 module Main exposing (main)
 
 import Browser
+import Browser.Dom
 import Browser.Events exposing (onAnimationFrameDelta)
 import Element exposing (Attribute, Color, Element, alignBottom, alignTop, centerX, centerY, column, el, fill, height, htmlAttribute, inFront, moveDown, moveRight, padding, px, rgb, row, spacing, text, width)
 import Element.Background as Background
@@ -16,6 +17,7 @@ import Math.Matrix4 as Mat4 exposing (Mat4)
 import Math.Vector2 as Vector2 exposing (vec2)
 import Math.Vector3 as Vec3 exposing (Vec3, vec3)
 import Shader exposing (Vertex, fragmentShader, vertexShader)
+import Task
 import WebGL exposing (Mesh, Shader)
 
 
@@ -24,39 +26,39 @@ main =
     Browser.element
         { init = \_ -> init
         , view = view
-        , subscriptions = \_ -> onAnimationFrameDelta TimeDelta
+        , subscriptions = subscriptions
         , update = update
         }
+
+
+subscriptions : Model -> Sub Msg
+subscriptions _ =
+    Sub.batch
+        [ Browser.Events.onAnimationFrameDelta TimeDelta
+        , Browser.Events.onResize (\w h -> ResizeWindow ( toFloat w, toFloat h ))
+        ]
 
 
 view : Model -> Html Msg
 view model =
     Element.layout [ Background.color (rgb 0.1 0.1 0.1) ] <|
-        row [ width (px 1280), height (px 720), centerX, centerY ]
+        row [ width fill, height fill, centerX, centerY ]
             [ el
                 [ width fill
                 , height fill
                 , Element.behindContent (glView model)
-                , htmlAttribute (Mouse.onMove (clientPos >> Move))
+                , htmlAttribute (Mouse.onMove (\event -> Move event.offsetPos))
                 ]
                 Element.none
             ]
-
-
-clientPos : Mouse.Event -> (Float, Float)
-clientPos event =
-    let
-        ( x, y ) =
-            event.clientPos
-    in
-    (x, y)
 
 
 glView : Model -> Element Msg
 glView model =
     Element.html
         (WebGL.toHtml
-            [ Html.Attributes.height 720
+            [ Html.Attributes.style "height" "100%"
+            , Html.Attributes.height 720
             , Html.Attributes.width 1280
             ]
             [ WebGL.entity vertexShader
@@ -64,7 +66,7 @@ glView model =
                 mesh
                 { time = model.time / 1000
                 , speed = model.speed
-                , resolution = vec2 1280 720
+                , resolution = vec2 (Tuple.first model.resolution) (Tuple.second model.resolution)
                 , xPos = model.xPos
                 , targetXPos = model.targetXPos
                 , distance = model.distance
@@ -79,6 +81,7 @@ type alias Model =
     , distance : Float
     , xPos : Float
     , targetXPos : Float
+    , resolution : ( Float, Float )
     }
 
 
@@ -89,14 +92,17 @@ init =
       , distance = 0
       , xPos = 0
       , targetXPos = 0
+      , resolution = ( 0, 0 )
       }
-    , Cmd.none
+    , Task.perform InitWindowSize Browser.Dom.getViewport
     )
 
 
 type Msg
     = TimeDelta Float
-    | Move (Float, Float)
+    | Move ( Float, Float )
+    | ResizeWindow ( Float, Float )
+    | InitWindowSize Browser.Dom.Viewport
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -111,10 +117,21 @@ update msg model =
               }
             , Cmd.none
             )
-        Move (x, y) ->
+
+        Move ( x, y ) ->
             ( { model
-                | targetXPos = ((x / 1280) - 0.5) * 2
+                | targetXPos = ((x / Tuple.first model.resolution) - 0.5) * 2
               }
+            , Cmd.none
+            )
+
+        ResizeWindow ( x, y ) ->
+            ( { model | resolution = ( x, y ) }
+            , Cmd.none
+            )
+
+        InitWindowSize viewport ->
+            ( { model | resolution = ( viewport.viewport.width, viewport.viewport.height ) }
             , Cmd.none
             )
 
